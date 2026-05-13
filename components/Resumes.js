@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import Icon from './Icon';
-import { useStore } from '@/lib/store';
+import Icon from "./Icon";
+import { useStore } from "@/lib/store";
 
 export default function Resumes({ onNew, onEdit }) {
   const { resumes, applications, deleteResume } = useStore();
@@ -17,7 +17,9 @@ export default function Resumes({ onNew, onEdit }) {
       <div className="page-header">
         <div>
           <div className="page-title">Resume Vault</div>
-          <div className="page-sub">Tailored versions for different roles and industries.</div>
+          <div className="page-sub">
+            Tailored versions for different roles and industries.
+          </div>
         </div>
         <button className="btn" onClick={onNew}>
           <Icon name="plus" size={14} strokeWidth={2} />
@@ -32,7 +34,8 @@ export default function Resumes({ onNew, onEdit }) {
           </div>
           <h3>No resume versions</h3>
           <p>
-            Create different versions tailored to specific roles, industries, or seniority levels.
+            Create different versions tailored to specific roles, industries, or
+            seniority levels.
           </p>
           <button className="btn" onClick={onNew}>
             Add version
@@ -48,29 +51,52 @@ export default function Resumes({ onNew, onEdit }) {
                   <Icon name="resumes" size={19} strokeWidth={1.6} />
                 </div>
                 <div className="resume-name">{r.name}</div>
-                <div className="resume-target">{r.target || 'No target set'}</div>
+                <div className="resume-target">
+                  {r.target || "No target set"}
+                </div>
                 {r.notes && <div className="resume-notes">{r.notes}</div>}
                 <div className="resume-foot">
                   <span className="resume-uses">
-                    {r.uses === 1 ? '1 use' : r.uses + ' uses'}
+                    {r.uses === 1 ? "1 use" : r.uses + " uses"}
                   </span>
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <div
+                    style={{ display: "flex", gap: 4, alignItems: "center" }}
+                  >
                     {r.link && (
                       <a
                         href={r.link}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
-                          color: 'var(--accent)',
-                          textDecoration: 'none',
+                          color: "var(--accent)",
+                          textDecoration: "none",
                           fontSize: 12,
                           fontWeight: 500,
-                          padding: '5px 11px',
+                          padding: "5px 11px",
                           borderRadius: 6,
-                          border: '1px solid var(--accent)',
+                          border: "1px solid var(--accent)",
                         }}
                       >
                         Open ↗
+                      </a>
+                    )}
+                    {r.fileData && (
+                      <a
+                        href={r.fileData}
+                        download={r.fileName || ""}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          color: "var(--accent)",
+                          textDecoration: "none",
+                          fontSize: 12,
+                          fontWeight: 500,
+                          padding: "5px 11px",
+                          borderRadius: 6,
+                          border: "1px solid var(--accent)",
+                        }}
+                      >
+                        {r.fileName ? `Download ${r.fileName}` : "Open file"}
                       </a>
                     )}
                     <button
@@ -85,8 +111,8 @@ export default function Resumes({ onNew, onEdit }) {
                       title="Delete"
                       onClick={() => {
                         const msg = inUse
-                          ? 'This version is linked to applications. Delete anyway?'
-                          : 'Delete this version?';
+                          ? "This version is linked to applications. Delete anyway?"
+                          : "Delete this version?";
                         if (confirm(msg)) deleteResume(r.id);
                       }}
                     >
