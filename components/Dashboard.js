@@ -3,19 +3,19 @@
 import Icon from './Icon';
 import Sankey from './Sankey';
 import KanbanBoard from './KanbanBoard';
-import { useStore } from '@/lib/store';
+import { useApplications } from '@/lib/applications';
 import { greeting, daysSince } from '@/lib/helpers';
 
 export default function Dashboard({ onNew, onEdit, onSwitch }) {
-  const { applications } = useStore();
+  const { applications } = useApplications();
   const apps = applications;
   const total = apps.length;
   const active = apps.filter((a) =>
     ['applied', 'screening', 'interview'].includes(a.status)
   ).length;
-  const replied = apps.filter((a) => !['applied', 'ghosted'].includes(a.status)).length;
+  const replied = apps.filter((a) => a.status !== 'applied').length;
   const rate = total ? Math.round((replied / total) * 100) : null;
-  const waits = apps.filter((a) => a.status === 'applied').map((a) => daysSince(a.date));
+  const waits = apps.filter((a) => a.status === 'applied').map((a) => daysSince(a.applied_date));
   const avgWait = waits.length
     ? Math.round(waits.reduce((s, x) => s + x, 0) / waits.length)
     : null;

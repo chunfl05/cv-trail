@@ -3,13 +3,14 @@
 import { daysSince } from '@/lib/helpers';
 
 /**
- * Multi-stage Sankey flow:
- *  Applications → (Interviews | Rejected | Pending | No Answer)
- *    Interviews → (Second Round | Rejected)
- *      Second Round → (Third Round | Rejected)
- *        Third Round → (Offers | Rejected)
+ * Single-stage flow: Applications → current pipeline stage.
  *
- * All the geometry logic is pulled verbatim from the original single-file app.
+ * The old multi-round "rejected at interview / second round / third round"
+ * breakdown relied on distinct rejected/ghosted statuses to infer how far an
+ * application got before it stopped. The 5-value status model (applied /
+ * screening / interview / offer / closed) only tracks *current* stage, not
+ * history, so a closed application can no longer be attributed to the round
+ * it closed at — this now shows the current distribution instead.
  */
 export default function Sankey({ apps }) {
   const total = apps.length;
@@ -38,26 +39,17 @@ export default function Sankey({ apps }) {
     );
   }
 
-  // === Compute flow values ===
-  const interviews = apps.filter((a) =>
-    ['screening', 'interview', 'offer'].includes(a.status)
-  ).length;
-  const rejectedEarly = apps.filter((a) => a.status === 'rejected').length;
-  const noAnswer = apps.filter(
-    (a) => a.status === 'ghosted' || (a.status === 'applied' && daysSince(a.date) > 30)
-  ).length;
-  const stillPending = apps.filter(
-    (a) => a.status === 'applied' && daysSince(a.date) <= 30
-  ).length;
-
-  const secondRound = apps.filter((a) => ['interview', 'offer'].includes(a.status)).length;
-  const interviewRejected = interviews - secondRound;
-
-  const thirdRound = apps.filter((a) => a.status === 'offer').length;
-  const secondRoundRejected = secondRound - thirdRound;
-
+  // === Compute flow values (current status distribution — mutually exclusive) ===
+  const screening = apps.filter((a) => a.status === 'screening').length;
+  const interview = apps.filter((a) => a.status === 'interview').length;
   const offers = apps.filter((a) => a.status === 'offer').length;
-  const thirdRoundRejected = thirdRound - offers;
+  const closed = apps.filter((a) => a.status === 'closed').length;
+  const stillPending = apps.filter(
+    (a) => a.status === 'applied' && daysSince(a.applied_date) <= 30
+  ).length;
+  const noAnswer = apps.filter(
+    (a) => a.status === 'applied' && daysSince(a.applied_date) > 30
+  ).length;
 
   const conv = ((offers / total) * 100).toFixed(1) + '% offer rate';
 
@@ -69,13 +61,7 @@ export default function Sankey({ apps }) {
   const usableH = H - padding.top - padding.bottom;
   const unit = (usableH - 40) / Math.max(total, 1);
 
-  const cols = [
-    padding.left,
-    padding.left + (W - padding.left - padding.right) * 0.22,
-    padding.left + (W - padding.left - padding.right) * 0.48,
-    padding.left + (W - padding.left - padding.right) * 0.72,
-    W - padding.right,
-  ];
+  const cols = [padding.left, W - padding.right];
 
   const GAP = 14;
 
@@ -92,42 +78,20 @@ export default function Sankey({ apps }) {
   }
 
   const col0 = makeNodes(
-    [{ id: 'applied', label: 'Applications', value: total, color: 'var(--sk-applied)', textColor: '#7a766e' }],
+    [{ id: 'applied', label: 'Applications', value: total, color: 'var(--sk-applied)', textColor: '#64748B' }],
     cols[0]
   );
 
   const col1 = makeNodes(
     [
-      { id: 'interviews', label: 'Interviews', value: interviews, color: 'var(--sk-interview)', textColor: '#4a6b88' },
-      { id: 'rejectedEarly', label: 'Rejected', value: rejectedEarly, color: 'var(--sk-rejected)', textColor: '#a26528' },
-      { id: 'pending', label: 'Pending', value: stillPending, color: 'var(--sk-applied)', textColor: '#7a766e' },
-      { id: 'noAnswer', label: 'No Answer', value: noAnswer, color: 'var(--sk-noanswer)', textColor: '#a05a4f' },
+      { id: 'pending', label: 'Pending', value: stillPending, color: 'var(--sk-applied)', textColor: '#64748B' },
+      { id: 'noAnswer', label: 'No Answer', value: noAnswer, color: 'var(--sk-noanswer)', textColor: '#8CA3BD' },
+      { id: 'screening', label: 'Screening', value: screening, color: 'var(--sk-interview)', textColor: '#4E7FA8' },
+      { id: 'interview', label: 'Interview', value: interview, color: 'var(--sk-second)', textColor: '#3D6690' },
+      { id: 'offers', label: 'Offer', value: offers, color: 'var(--sk-offer)', textColor: '#1E4E8C' },
+      { id: 'closed', label: 'Closed', value: closed, color: 'var(--sk-rejected)', textColor: '#64748B' },
     ],
     cols[1]
-  );
-
-  const col2 = makeNodes(
-    [
-      { id: 'secondRound', label: 'Second Round', value: secondRound, color: 'var(--sk-second)', textColor: '#4a6b88' },
-      { id: 'interviewRej', label: 'Rejected', value: interviewRejected, color: 'var(--sk-rejected)', textColor: '#a26528' },
-    ],
-    cols[2]
-  );
-
-  const col3 = makeNodes(
-    [
-      { id: 'thirdRound', label: 'Third Round', value: thirdRound, color: 'var(--sk-third)', textColor: '#4a6b88' },
-      { id: 'secondRej', label: 'Rejected', value: secondRoundRejected, color: 'var(--sk-rejected)', textColor: '#a26528' },
-    ],
-    cols[3]
-  );
-
-  const col4 = makeNodes(
-    [
-      { id: 'offers', label: 'Offers', value: offers, color: 'var(--sk-offer)', textColor: '#4a6240' },
-      { id: 'thirdRej', label: 'Rejected', value: thirdRoundRejected, color: 'var(--sk-rejected)', textColor: '#a26528' },
-    ],
-    cols[4]
   );
 
   // === Links ===
@@ -154,22 +118,12 @@ export default function Sankey({ apps }) {
   }
 
   buildLinks(col0, 'applied', [
-    col1.find((n) => n.id === 'interviews'),
-    col1.find((n) => n.id === 'rejectedEarly'),
     col1.find((n) => n.id === 'pending'),
     col1.find((n) => n.id === 'noAnswer'),
-  ]);
-  buildLinks(col1, 'interviews', [
-    col2.find((n) => n.id === 'secondRound'),
-    col2.find((n) => n.id === 'interviewRej'),
-  ]);
-  buildLinks(col2, 'secondRound', [
-    col3.find((n) => n.id === 'thirdRound'),
-    col3.find((n) => n.id === 'secondRej'),
-  ]);
-  buildLinks(col3, 'thirdRound', [
-    col4.find((n) => n.id === 'offers'),
-    col4.find((n) => n.id === 'thirdRej'),
+    col1.find((n) => n.id === 'screening'),
+    col1.find((n) => n.id === 'interview'),
+    col1.find((n) => n.id === 'offers'),
+    col1.find((n) => n.id === 'closed'),
   ]);
 
   function linkPath(l) {
@@ -206,7 +160,7 @@ export default function Sankey({ apps }) {
       <div className="card-head">
         <div>
           <div className="card-title">Where applications go</div>
-          <div className="card-sub">From submission to outcome — visualized as flow.</div>
+          <div className="card-sub">Current pipeline distribution.</div>
         </div>
         <div className="tag">{conv}</div>
       </div>
@@ -217,9 +171,6 @@ export default function Sankey({ apps }) {
           ))}
           {col0.map((n, i) => renderNode(n, 'left', `c0${i}`))}
           {col1.map((n, i) => renderNode(n, 'right', `c1${i}`))}
-          {col2.map((n, i) => renderNode(n, 'right', `c2${i}`))}
-          {col3.map((n, i) => renderNode(n, 'right', `c3${i}`))}
-          {col4.map((n, i) => renderNode(n, 'right', `c4${i}`))}
         </svg>
       </div>
     </div>

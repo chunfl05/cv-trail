@@ -2,63 +2,71 @@
 
 import { useEffect, useState } from "react";
 import Modal from "./Modal";
-import { useStore } from "@/lib/store";
 
 const EMPTY = {
-  name: "",
+  label: "",
+  is_base: false,
   target: "",
   notes: "",
   link: "",
-  fileName: "",
-  fileData: "",
 };
 
-export default function ResumeModal({ open, editing, onClose }) {
-  const { addResume, updateResume } = useStore();
+export default function ResumeModal({ open, editing, onClose, onSave, uploadResumeFile }) {
   const [form, setForm] = useState(EMPTY);
+  const [newFile, setNewFile] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    setNewFile(null);
     if (editing) {
       setForm({
-        name: editing.name || "",
-        target: editing.target || "",
-        notes: editing.notes || "",
-        link: editing.link || "",
-        fileName: editing.fileName || "",
-        fileData: editing.fileData || "",
+        label: editing.label || "",
+        is_base: !!editing.is_base,
+        target: editing.content?.target || "",
+        notes: editing.content?.notes || "",
+        link: /^https?:\/\//i.test(editing.file_url || "") ? editing.file_url : "",
       });
     } else {
       setForm(EMPTY);
     }
   }, [open, editing]);
 
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      setForm({ ...form, fileName: file.name, fileData: reader.result });
-    };
-    reader.readAsDataURL(file);
+  const set = (k) => (e) => {
+    const value = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+    setForm({ ...form, [k]: value });
   };
 
-  const clearFile = () => setForm({ ...form, fileName: "", fileData: "" });
-
-  const save = () => {
-    if (!form.name.trim()) {
+  const save = async () => {
+    if (!form.label.trim()) {
       alert("Version name is required.");
       return;
     }
-    if (editing) {
-      updateResume(editing.id, form);
-    } else {
-      addResume(form);
+    setSaving(true);
+    try {
+      let fileUrl = form.link.trim() || null;
+      if (newFile) {
+        fileUrl = await uploadResumeFile(newFile);
+      } else if (!fileUrl && editing && !/^https?:\/\//i.test(editing.file_url || "")) {
+        // Keep an existing uploaded file's storage path if the user didn't change anything.
+        fileUrl = editing.file_url || null;
+      }
+      const payload = {
+        label: form.label.trim(),
+        is_base: form.is_base,
+        file_url: fileUrl,
+        content: {
+          target: form.target.trim() || null,
+          notes: form.notes.trim() || null,
+        },
+      };
+      await onSave(payload);
+      onClose();
+    } catch (e) {
+      alert(e.message || "Failed to save resume.");
+    } finally {
+      setSaving(false);
     }
-    onClose();
   };
 
   return (
@@ -71,8 +79,8 @@ export default function ResumeModal({ open, editing, onClose }) {
           <button className="btn ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn" onClick={save}>
-            Save
+          <button className="btn" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
           </button>
         </>
       }
@@ -82,10 +90,16 @@ export default function ResumeModal({ open, editing, onClose }) {
           <label>Version name</label>
           <input
             type="text"
-            value={form.name}
-            onChange={set("name")}
+            value={form.label}
+            onChange={set("label")}
             placeholder="e.g. Senior PM — Fintech"
           />
+        </div>
+        <div className="full">
+          <label style={{ display: "flex", alignItems: "center", gap: 8, textTransform: "none" }}>
+            <input type="checkbox" style={{ width: "auto" }} checked={form.is_base} onChange={set("is_base")} />
+            Base resume (starting point for tailoring)
+          </label>
         </div>
         <div className="full">
           <label>Target role / industry</label>
@@ -105,7 +119,7 @@ export default function ResumeModal({ open, editing, onClose }) {
           />
         </div>
         <div className="full">
-          <label>Link</label>
+          <label>Link (used only if no file is uploaded)</label>
           <input
             type="url"
             value={form.link}
@@ -118,31 +132,9 @@ export default function ResumeModal({ open, editing, onClose }) {
           <input
             type="file"
             accept=".pdf,.doc,.docx,.txt"
-            onChange={handleFileUpload}
+            onChange={(e) => setNewFile(e.target.files?.[0] || null)}
           />
-          {form.fileName ? (
-            <div
-              className="file-preview"
-              style={{
-                marginTop: 8,
-                display: "flex",
-                gap: 8,
-                alignItems: "center",
-              }}
-            >
-              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                {form.fileName}
-              </span>
-              <button
-                type="button"
-                className="btn ghost"
-                onClick={clearFile}
-                style={{ padding: "6px 10px" }}
-              >
-                Remove
-              </button>
-            </div>
-          ) : null}
+          {newFile && <p className="page-sub" style={{ marginTop: 8 }}>{newFile.name}</p>}
         </div>
       </div>
     </Modal>

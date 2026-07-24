@@ -7,18 +7,14 @@ const COLS = [
   { key: 'screening', title: 'Screening' },
   { key: 'interview', title: 'Interview' },
   { key: 'offer', title: 'Offer' },
-  { key: 'rejected', title: 'Closed' },
+  { key: 'closed', title: 'Closed' },
 ];
 
 export default function KanbanBoard({ apps, onCardClick }) {
   return (
     <div className="board">
       {COLS.map((c) => {
-        const list = apps.filter((a) =>
-          c.key === 'rejected'
-            ? ['rejected', 'ghosted'].includes(a.status)
-            : a.status === c.key
-        );
+        const list = apps.filter((a) => a.status === c.key);
         return (
           <div className="column" key={c.key}>
             <div className="column-head">
@@ -30,7 +26,7 @@ export default function KanbanBoard({ apps, onCardClick }) {
               <div className="col-empty">No items</div>
             ) : (
               list.map((a) => {
-                const wait = daysSince(a.date);
+                const wait = daysSince(a.applied_date);
                 const warn = a.status === 'applied' && wait > 14;
                 return (
                   <div
@@ -39,9 +35,9 @@ export default function KanbanBoard({ apps, onCardClick }) {
                     onClick={() => onCardClick(a)}
                   >
                     <div className="kc-company">{a.company}</div>
-                    <div className="kc-role">{a.role}</div>
+                    <div className="kc-role">{a.role_title}</div>
                     <div className="kc-meta">
-                      <span>{fmtDate(a.date)}</span>
+                      <span>{fmtDate(a.applied_date)}</span>
                       <span className={`wait-badge ${warn ? 'warn' : ''}`}>{wait}d</span>
                     </div>
                   </div>

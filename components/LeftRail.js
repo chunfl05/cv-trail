@@ -2,17 +2,22 @@
 
 import Icon from './Icon';
 import { useStore } from '@/lib/store';
+import { useApplications } from '@/lib/applications';
+import { useResumes } from '@/lib/resumes';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', count: null },
   { id: 'applications', label: 'Applications', icon: 'applications', count: 'apps' },
   { id: 'resumes', label: 'Resumes', icon: 'resumes', count: 'resumes' },
+  { id: 'experiences', label: 'Experience Bank', icon: 'experiences', count: null },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', count: null },
   { id: 'retrospective', label: 'Insights', icon: 'insights', count: 'retros' },
 ];
 
 export default function LeftRail({ view, onSwitch }) {
-  const { applications, resumes, retros } = useStore();
+  const { retros } = useStore();
+  const { applications } = useApplications();
+  const { resumes } = useResumes();
   const counts = {
     apps: applications.length,
     resumes: resumes.length,

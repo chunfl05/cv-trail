@@ -43,6 +43,13 @@ const ICONS = {
       <path d="M3 7h14M3 11h14" />
     </>
   ),
+  experiences: (
+    <>
+      <rect x="3" y="7" width="14" height="10" rx="1.5" />
+      <path d="M7.5 7V5a2 2 0 012-2h1a2 2 0 012 2v2" />
+      <path d="M3 11.5h14" />
+    </>
+  ),
 };
 
 export default function Icon({ name, size = 16, strokeWidth = 1.6, className, style }) {

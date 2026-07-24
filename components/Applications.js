@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Icon from './Icon';
-import { useStore } from '@/lib/store';
+import { useApplications } from '@/lib/applications';
 import {
   daysSince,
   fmtDate,
@@ -11,21 +11,21 @@ import {
 } from '@/lib/helpers';
 
 export default function Applications({ onNew, onEdit }) {
-  const { applications, resumes, cycleApplicationStatus, deleteApplication } = useStore();
+  const { applications, cycleApplicationStatus, deleteApplication } = useApplications();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [channelFilter, setChannelFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState('');
 
   const filtered = applications
     .filter(
       (a) =>
         !search ||
         a.company.toLowerCase().includes(search.toLowerCase()) ||
-        a.role.toLowerCase().includes(search.toLowerCase())
+        a.role_title.toLowerCase().includes(search.toLowerCase())
     )
     .filter((a) => !statusFilter || a.status === statusFilter)
-    .filter((a) => !channelFilter || a.channel === channelFilter)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+    .filter((a) => !sourceFilter || a.source === sourceFilter)
+    .sort((a, b) => new Date(b.applied_date) - new Date(a.applied_date));
 
   return (
     <section className="view active">
@@ -53,11 +53,10 @@ export default function Applications({ onNew, onEdit }) {
           <option value="screening">Screening</option>
           <option value="interview">Interview</option>
           <option value="offer">Offer</option>
-          <option value="rejected">Rejected</option>
-          <option value="ghosted">Ghosted</option>
+          <option value="closed">Closed</option>
         </select>
-        <select value={channelFilter} onChange={(e) => setChannelFilter(e.target.value)}>
-          <option value="">All channels</option>
+        <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+          <option value="">All sources</option>
           <option value="LinkedIn">LinkedIn</option>
           <option value="Referral">Referral</option>
           <option value="Company site">Company site</option>
@@ -84,9 +83,9 @@ export default function Applications({ onNew, onEdit }) {
               <thead>
                 <tr>
                   <th>Company / Role</th>
-                  <th>Channel</th>
+                  <th>Source</th>
                   <th>Status</th>
-                  <th>Resume</th>
+                  <th>Match</th>
                   <th>Applied</th>
                   <th>Wait</th>
                   <th style={{ width: 40 }}></th>
@@ -94,8 +93,7 @@ export default function Applications({ onNew, onEdit }) {
               </thead>
               <tbody>
                 {filtered.map((a) => {
-                  const wait = daysSince(a.date);
-                  const res = resumes.find((r) => r.id === a.resumeId);
+                  const wait = daysSince(a.applied_date);
                   return (
                     <tr key={a.id}>
                       <td onClick={() => onEdit(a)} style={{ cursor: 'pointer' }}>
@@ -103,12 +101,12 @@ export default function Applications({ onNew, onEdit }) {
                           <div className="company-avatar">{getInitials(a.company)}</div>
                           <div>
                             <div className="company">{a.company}</div>
-                            <div className="role">{a.role}</div>
+                            <div className="role">{a.role_title}</div>
                           </div>
                         </div>
                       </td>
                       <td>
-                        <span className="tag">{a.channel || '—'}</span>
+                        <span className="tag">{a.source || '—'}</span>
                       </td>
                       <td>
                         <button
@@ -122,7 +120,11 @@ export default function Applications({ onNew, onEdit }) {
                         </button>
                       </td>
                       <td style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>
-                        {res ? res.name : <span style={{ color: 'var(--ink-4)' }}>—</span>}
+                        {a.match_score !== null && a.match_score !== undefined ? (
+                          `${a.match_score}%`
+                        ) : (
+                          <span style={{ color: 'var(--ink-4)' }}>—</span>
+                        )}
                       </td>
                       <td
                         style={{
@@ -131,7 +133,7 @@ export default function Applications({ onNew, onEdit }) {
                           color: 'var(--ink-3)',
                         }}
                       >
-                        {fmtDate(a.date)}
+                        {fmtDate(a.applied_date)}
                       </td>
                       <td
                         style={{

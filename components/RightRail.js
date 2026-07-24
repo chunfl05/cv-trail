@@ -1,10 +1,12 @@
 'use client';
 
 import { useStore } from '@/lib/store';
+import { useApplications } from '@/lib/applications';
 import { fmtDate, daysSince, isoDate } from '@/lib/helpers';
 
 export default function RightRail() {
-  const { events, applications } = useStore();
+  const { events } = useStore();
+  const { applications } = useApplications();
 
   const now = new Date();
   const weekStr = isoDate(new Date(now.getTime() + 7 * 86400000));
@@ -16,8 +18,8 @@ export default function RightRail() {
     .slice(0, 4);
 
   const stale = applications
-    .filter((a) => a.status === 'applied' && daysSince(a.date) > 14)
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .filter((a) => a.status === 'applied' && daysSince(a.applied_date) > 14)
+    .sort((a, b) => new Date(a.applied_date) - new Date(b.applied_date))
     .slice(0, 4);
 
   return (
@@ -51,7 +53,7 @@ export default function RightRail() {
               <div className="rail-item" key={a.id}>
                 <div className="rail-item-title">{a.company}</div>
                 <div className="rail-item-meta">
-                  Waiting {daysSince(a.date)} days · {a.role}
+                  Waiting {daysSince(a.applied_date)} days · {a.role_title}
                 </div>
               </div>
             ))
@@ -74,7 +76,7 @@ export default function RightRail() {
         >
           About CV Trail
         </div>
-        Your data stays in your browser. Nothing leaves your device unless you choose to export it.
+        Applications and experiences are stored in your private Supabase project — only you can sign in and see them.
       </div>
     </aside>
   );

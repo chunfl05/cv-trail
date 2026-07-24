@@ -2,10 +2,12 @@
 
 import Icon from './Icon';
 import { useStore } from '@/lib/store';
+import { useApplications } from '@/lib/applications';
 import { fmtDate } from '@/lib/helpers';
 
 export default function Retrospective({ onNew }) {
-  const { retros, applications, deleteRetro } = useStore();
+  const { retros, deleteRetro } = useStore();
+  const { applications } = useApplications();
 
   const done = retros.filter((r) => r.outcome !== 'pending');
   const passed = done.filter((r) => r.outcome === 'passed').length;
@@ -74,7 +76,7 @@ export default function Retrospective({ onNew }) {
                 <div>
                   <div className="retro-head">
                     <span className="retro-co">
-                      {app ? `${app.company} — ${app.role}` : 'Standalone interview'}
+                      {app ? `${app.company} — ${app.role_title}` : 'Standalone interview'}
                     </span>
                     <span className="retro-date">
                       {fmtDate(r.date)}

@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react';
 import Modal from './Modal';
 import { useStore } from '@/lib/store';
+import { useApplications } from '@/lib/applications';
 import { isoDate } from '@/lib/helpers';
 
 const EMPTY = { title: '', type: 'interview', date: '', time: '', appId: '', notes: '' };
 
 export default function EventModal({ open, onClose }) {
-  const { applications, addEvent } = useStore();
+  const { addEvent } = useStore();
+  const { applications } = useApplications();
   const [form, setForm] = useState(EMPTY);
 
   useEffect(() => {
@@ -65,7 +67,7 @@ export default function EventModal({ open, onClose }) {
           <select value={form.appId} onChange={set('appId')}>
             <option value="">— None —</option>
             {applications.map((a) => (
-              <option key={a.id} value={a.id}>{a.company} — {a.role}</option>
+              <option key={a.id} value={a.id}>{a.company} — {a.role_title}</option>
             ))}
           </select>
         </div>
