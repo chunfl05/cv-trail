@@ -4,11 +4,13 @@ import { useState } from "react";
 import Icon from "./Icon";
 import { useResumes } from "@/lib/resumes";
 import ResumeModal from "./modals/ResumeModal";
+import ResumeViewModal from "./modals/ResumeViewModal";
 
 export default function Resumes() {
   const { resumes, loading, error, addResume, updateResume, deleteResume, uploadResumeFile, getFileUrl } =
     useResumes();
   const [modal, setModal] = useState({ open: false, editing: null });
+  const [viewing, setViewing] = useState(null);
 
   const openNew = () => setModal({ open: true, editing: null });
   const openEdit = (r) => setModal({ open: true, editing: r });
@@ -96,14 +98,24 @@ export default function Resumes() {
               {r.content?.notes && <div className="resume-notes">{r.content.notes}</div>}
               <div className="resume-foot" style={{ justifyContent: "flex-end" }}>
                 <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                  {r.file_url && (
+                  {r.content?.latex ? (
                     <button
                       className="btn outline sm"
-                      onClick={() => open(r)}
+                      onClick={() => setViewing(r)}
                       style={{ padding: "5px 11px" }}
                     >
-                      Open ↗
+                      View
                     </button>
+                  ) : (
+                    r.file_url && (
+                      <button
+                        className="btn outline sm"
+                        onClick={() => open(r)}
+                        style={{ padding: "5px 11px" }}
+                      >
+                        Open ↗
+                      </button>
+                    )
                   )}
                   <button className="icon-btn edit" title="Edit" onClick={() => openEdit(r)}>
                     <Icon name="edit" size={14} strokeWidth={1.5} />
@@ -125,6 +137,7 @@ export default function Resumes() {
         onSave={save}
         uploadResumeFile={uploadResumeFile}
       />
+      <ResumeViewModal open={!!viewing} resume={viewing} onClose={() => setViewing(null)} />
     </section>
   );
 }

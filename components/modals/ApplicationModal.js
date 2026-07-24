@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Modal from './Modal';
+import ResumePreview from '@/components/ResumePreview';
 import { useApplications } from '@/lib/applications';
 import { createClient } from '@/lib/supabase/client';
 import { isoDate } from '@/lib/helpers';
@@ -31,10 +32,14 @@ export default function ApplicationModal({ open, editing, onClose }) {
   const [resumeTailorResult, setResumeTailorResult] = useState(null);
   const [resumeTailorError, setResumeTailorError] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [generatingCoverLetter, setGeneratingCoverLetter] = useState(false);
+  const [coverLetterResult, setCoverLetterResult] = useState(null);
+  const [coverLetterError, setCoverLetterError] = useState(null);
+  const [coverLetterCopied, setCoverLetterCopied] = useState(false);
 
-  // Loads the most recently generated resume for this application, so
-  // reopening the modal shows what was last generated without spending
-  // tokens on a fresh AI call.
+  // Loads the most recently generated resume and cover letter for this
+  // application, so reopening the modal shows what was last generated
+  // without spending tokens on a fresh AI call.
   const loadLatestTailoring = async (applicationId) => {
     const { data } = await supabase
       .from('tailoring_runs')
@@ -45,26 +50,16 @@ export default function ApplicationModal({ open, editing, onClose }) {
 
     const resumeRun = data.find((r) => r.suggestions?.resume_json !== undefined);
     if (resumeRun) {
-      let fileUrl = null;
-      if (resumeRun.suggestions.resume_id) {
-        const { data: resumeRow } = await supabase
-          .from('resumes')
-          .select('file_url')
-          .eq('id', resumeRun.suggestions.resume_id)
-          .maybeSingle();
-        if (resumeRow?.file_url) {
-          const { data: signed } = await supabase.storage
-            .from('resumes')
-            .createSignedUrl(resumeRow.file_url, 3600);
-          fileUrl = signed?.signedUrl || null;
-        }
-      }
       setResumeTailorResult({
         match_score: resumeRun.match_score,
         resume: resumeRun.suggestions.resume_json,
         latex: resumeRun.suggestions.latex || resumeRun.generated_text || '',
-        file_url: fileUrl,
       });
+    }
+
+    const coverLetterRun = data.find((r) => r.suggestions?.type === 'cover_letter');
+    if (coverLetterRun) {
+      setCoverLetterResult({ cover_letter: coverLetterRun.generated_text || '' });
     }
   };
 
@@ -76,6 +71,9 @@ export default function ApplicationModal({ open, editing, onClose }) {
     setResumeTailorResult(null);
     setResumeTailorError(null);
     setCopied(false);
+    setCoverLetterResult(null);
+    setCoverLetterError(null);
+    setCoverLetterCopied(false);
     if (editing) {
       setForm({
         company: editing.company || '',
@@ -196,6 +194,42 @@ export default function ApplicationModal({ open, editing, onClose }) {
     }
   };
 
+  const runCoverLetter = async () => {
+    if (!form.jd_text.trim()) {
+      alert('Paste the job description first.');
+      return;
+    }
+    setGeneratingCoverLetter(true);
+    setCoverLetterError(null);
+    setCoverLetterResult(null);
+    setCoverLetterCopied(false);
+    try {
+      const res = await fetch('/api/cover-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ application_id: editing.id, jd_text: form.jd_text }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Cover letter generation failed.');
+      setCoverLetterResult(data.result);
+    } catch (e) {
+      setCoverLetterError(e.message || 'Cover letter generation failed.');
+    } finally {
+      setGeneratingCoverLetter(false);
+    }
+  };
+
+  const copyCoverLetter = async () => {
+    if (!coverLetterResult?.cover_letter) return;
+    try {
+      await navigator.clipboard.writeText(coverLetterResult.cover_letter);
+      setCoverLetterCopied(true);
+      setTimeout(() => setCoverLetterCopied(false), 2000);
+    } catch {
+      alert('Could not copy — select the text manually.');
+    }
+  };
+
   return (
     <Modal
       open={open}
@@ -298,7 +332,7 @@ export default function ApplicationModal({ open, editing, onClose }) {
           <div className="full">
             <div className="auth-divider" style={{ margin: '4px 0 12px' }}>Tailor my resume</div>
             <p className="page-sub" style={{ marginBottom: 10 }}>
-              Builds a tailored resume from your Experience Bank and this JD, and saves a PDF to the Resume Vault.
+              Builds a tailored resume from your Experience Bank and this JD, previewed right here and saved to the Resume Vault.
             </p>
             <button
               type="button"
@@ -353,21 +387,10 @@ export default function ApplicationModal({ open, editing, onClose }) {
                   >
                     {copied ? 'Copied!' : 'Copy LaTeX'}
                   </button>
-                  {resumeTailorResult.file_url && (
-                    <a
-                      className="btn ghost sm"
-                      href={resumeTailorResult.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ textDecoration: 'none' }}
-                    >
-                      Download PDF preview
-                    </a>
-                  )}
                 </div>
 
                 <p className="page-sub" style={{ margin: 0 }}>
-                  Paste the LaTeX below into your resume's .tex file. A quick-preview PDF is also saved to the Resume Vault.
+                  Paste the LaTeX below into your resume's .tex file, or check the preview beneath it. This version is also saved to the Resume Vault.
                 </p>
 
                 <pre
@@ -398,90 +421,54 @@ export default function ApplicationModal({ open, editing, onClose }) {
                     overflowY: 'auto',
                   }}
                 >
-                  <div className="card-sub" style={{ marginBottom: 8 }}>Quick preview</div>
-                  <div style={{ textAlign: 'center', fontFamily: "'Source Serif 4', serif", fontWeight: 600, fontSize: 16 }}>
-                    {resumeTailorResult.resume.name}
-                  </div>
-                  <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--ink-3)', marginBottom: 12 }}>
-                    {resumeTailorResult.resume.contact}
-                  </div>
-                  {resumeTailorResult.resume.sections?.map((section, si) => (
-                    <div key={si} style={{ marginBottom: 10 }}>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.04em',
-                          borderBottom: '1px solid var(--line-soft)',
-                          paddingBottom: 3,
-                          marginBottom: 6,
-                        }}
-                      >
-                        {section.title}
-                      </div>
-                      {section.entries?.map((entry, ei) => (
-                        <div key={ei} style={{ marginBottom: 6 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                            <strong style={{ fontSize: 12.5 }}>{entry.heading}</strong>
-                            <span style={{ fontSize: 11, color: 'var(--ink-3)', whiteSpace: 'nowrap' }}>
-                              {entry.subheading}
-                            </span>
-                          </div>
-                          {entry.bullets?.length > 0 && (
-                            <ul style={{ margin: '3px 0 0', paddingLeft: 16, fontSize: 12, color: 'var(--ink-2)', lineHeight: 1.5 }}>
-                              {entry.bullets.map((b, bi) => (
-                                <li key={bi}>{b}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                  {resumeTailorResult.resume.skills?.length > 0 && (
-                    <div style={{ marginBottom: 10 }}>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.04em',
-                          borderBottom: '1px solid var(--line-soft)',
-                          paddingBottom: 3,
-                          marginBottom: 6,
-                        }}
-                      >
-                        Skills
-                      </div>
-                      {resumeTailorResult.resume.skills.map((line, li) => (
-                        <div key={li} style={{ fontSize: 12, color: 'var(--ink-2)', marginBottom: 2 }}>
-                          {line}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {resumeTailorResult.resume.additional?.length > 0 && (
-                    <div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.04em',
-                          borderBottom: '1px solid var(--line-soft)',
-                          paddingBottom: 3,
-                          marginBottom: 6,
-                        }}
-                      >
-                        Additional
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>
-                        {resumeTailorResult.resume.additional.join(' · ')}
-                      </div>
-                    </div>
-                  )}
+                  <div className="card-sub" style={{ marginBottom: 8 }}>Preview</div>
+                  <ResumePreview resume={resumeTailorResult.resume} />
                 </div>
+              </div>
+            )}
+
+            <div className="auth-divider" style={{ margin: '24px 0 12px' }}>Cover letter</div>
+            <p className="page-sub" style={{ marginBottom: 10 }}>
+              Drafts a cover letter from your Experience Bank and this JD. Anything requiring your personal opinion (e.g. why this company) is left as a placeholder for you to fill in.
+            </p>
+            <button
+              type="button"
+              className="btn"
+              onClick={runCoverLetter}
+              disabled={generatingCoverLetter}
+            >
+              {generatingCoverLetter ? 'Generating…' : 'Generate cover letter'}
+            </button>
+
+            {coverLetterError && (
+              <p className="auth-message error" style={{ margin: '14px 0' }}>{coverLetterError}</p>
+            )}
+
+            {coverLetterResult && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn sm" onClick={copyCoverLetter}>
+                    {coverLetterCopied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: 14,
+                    background: 'var(--paper-2)',
+                    border: '1px solid var(--line-soft)',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    maxHeight: 340,
+                    overflowY: 'auto',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {coverLetterResult.cover_letter}
+                </pre>
               </div>
             )}
           </div>

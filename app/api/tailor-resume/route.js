@@ -4,8 +4,7 @@ import { createClient, getUser } from '@/lib/supabase/server';
 import { stripJsonFence } from '@/lib/server/jsonFence';
 import { extractResumeText } from '@/lib/server/resumeText';
 import { buildLatexResume } from '@/lib/server/resumeLatex';
-import { renderResumeHtml, resumeJsonToPlainText } from '@/lib/server/resumeTemplate';
-import { htmlToPdfBuffer } from '@/lib/server/resumePdf';
+import { resumeJsonToPlainText } from '@/lib/server/resumeTemplate';
 import {
   BANK_SYSTEM_PROMPT,
   UPLOAD_SYSTEM_PROMPT,
@@ -232,39 +231,13 @@ async function handlePost(request) {
     skillsOrder,
   });
 
-  let pdfBuffer;
-  try {
-    const html = renderResumeHtml(resumeJson);
-    pdfBuffer = await htmlToPdfBuffer(html);
-  } catch (err) {
-    return NextResponse.json(
-      { error: err.message || 'Failed to render the resume preview PDF.' },
-      { status: 500 }
-    );
-  }
-
-  const storagePath = `${user.id}/${applicationId}-${crypto.randomUUID()}.pdf`;
-  const { error: uploadError } = await supabase.storage
-    .from('resumes')
-    .upload(storagePath, pdfBuffer, { contentType: 'application/pdf', upsert: false });
-  if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 });
-  }
-
-  const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-    .from('resumes')
-    .createSignedUrl(storagePath, 3600);
-  if (signedUrlError) {
-    return NextResponse.json({ error: signedUrlError.message }, { status: 500 });
-  }
-
   const label = `${application.role_title} @ ${application.company} (tailored)`;
   const { data: resumeRow, error: resumeInsertError } = await supabase
     .from('resumes')
     .insert({
       label,
       is_base: false,
-      file_url: storagePath,
+      file_url: null,
       content: { resume_json: resumeJson, latex },
     })
     .select('id')
@@ -301,7 +274,6 @@ async function handlePost(request) {
       resume: resumeJson,
       plain_text: plainText,
       resume_id: resumeRow.id,
-      file_url: signedUrlData.signedUrl,
     },
   });
 }
