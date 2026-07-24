@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react';
 import Modal from './Modal';
 import ResumePreview from '@/components/ResumePreview';
+import Icon from '@/components/Icon';
 import { useApplications } from '@/lib/applications';
 import { createClient } from '@/lib/supabase/client';
 import { isoDate } from '@/lib/helpers';
+
+const EMPTY_QUESTION = { question: '', length: 'medium' };
 
 const EMPTY = {
   company: '',
@@ -36,10 +39,15 @@ export default function ApplicationModal({ open, editing, onClose }) {
   const [coverLetterResult, setCoverLetterResult] = useState(null);
   const [coverLetterError, setCoverLetterError] = useState(null);
   const [coverLetterCopied, setCoverLetterCopied] = useState(false);
+  const [qaQuestions, setQaQuestions] = useState([EMPTY_QUESTION]);
+  const [answeringQuestions, setAnsweringQuestions] = useState(false);
+  const [qaResult, setQaResult] = useState(null);
+  const [qaError, setQaError] = useState(null);
+  const [qaCopiedIndex, setQaCopiedIndex] = useState(null);
 
-  // Loads the most recently generated resume and cover letter for this
-  // application, so reopening the modal shows what was last generated
-  // without spending tokens on a fresh AI call.
+  // Loads the most recently generated resume, cover letter, and Q&A answers
+  // for this application, so reopening the modal shows what was last
+  // generated without spending tokens on a fresh AI call.
   const loadLatestTailoring = async (applicationId) => {
     const { data } = await supabase
       .from('tailoring_runs')
@@ -61,6 +69,12 @@ export default function ApplicationModal({ open, editing, onClose }) {
     if (coverLetterRun) {
       setCoverLetterResult({ cover_letter: coverLetterRun.generated_text || '' });
     }
+
+    const qaRun = data.find((r) => r.suggestions?.type === 'qa');
+    if (qaRun && Array.isArray(qaRun.suggestions.answers)) {
+      setQaResult(qaRun.suggestions.answers);
+      setQaQuestions(qaRun.suggestions.answers.map((a) => ({ question: a.question, length: a.length || 'medium' })));
+    }
   };
 
   useEffect(() => {
@@ -74,6 +88,10 @@ export default function ApplicationModal({ open, editing, onClose }) {
     setCoverLetterResult(null);
     setCoverLetterError(null);
     setCoverLetterCopied(false);
+    setQaQuestions([EMPTY_QUESTION]);
+    setQaResult(null);
+    setQaError(null);
+    setQaCopiedIndex(null);
     if (editing) {
       setForm({
         company: editing.company || '',
@@ -225,6 +243,57 @@ export default function ApplicationModal({ open, editing, onClose }) {
       await navigator.clipboard.writeText(coverLetterResult.cover_letter);
       setCoverLetterCopied(true);
       setTimeout(() => setCoverLetterCopied(false), 2000);
+    } catch {
+      alert('Could not copy — select the text manually.');
+    }
+  };
+
+  const updateQuestionRow = (i, patch) => {
+    setQaQuestions((rows) => rows.map((r, ri) => (ri === i ? { ...r, ...patch } : r)));
+  };
+
+  const addQuestionRow = () => setQaQuestions((rows) => [...rows, EMPTY_QUESTION]);
+
+  const removeQuestionRow = (i) => {
+    setQaQuestions((rows) => (rows.length > 1 ? rows.filter((_, ri) => ri !== i) : rows));
+  };
+
+  const runAnswerQuestions = async () => {
+    if (!form.jd_text.trim()) {
+      alert('Paste the job description first.');
+      return;
+    }
+    const questions = qaQuestions.filter((q) => q.question.trim());
+    if (questions.length === 0) {
+      alert('Paste at least one application question first.');
+      return;
+    }
+    setAnsweringQuestions(true);
+    setQaError(null);
+    setQaResult(null);
+    setQaCopiedIndex(null);
+    try {
+      const res = await fetch('/api/answer-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ application_id: editing.id, jd_text: form.jd_text, questions }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Drafting answers failed.');
+      setQaResult(data.result.answers);
+    } catch (e) {
+      setQaError(e.message || 'Drafting answers failed.');
+    } finally {
+      setAnsweringQuestions(false);
+    }
+  };
+
+  const copyAnswer = async (i, text) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setQaCopiedIndex(i);
+      setTimeout(() => setQaCopiedIndex(null), 2000);
     } catch {
       alert('Could not copy — select the text manually.');
     }
@@ -469,6 +538,95 @@ export default function ApplicationModal({ open, editing, onClose }) {
                 >
                   {coverLetterResult.cover_letter}
                 </pre>
+              </div>
+            )}
+
+            <div className="auth-divider" style={{ margin: '24px 0 12px' }}>Application Q&A</div>
+            <p className="page-sub" style={{ marginBottom: 10 }}>
+              Paste the supplemental questions this application actually asks, pick a target length for each, and draft answers from your Experience Bank.
+            </p>
+
+            {qaQuestions.map((q, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 10 }}>
+                <textarea
+                  value={q.question}
+                  onChange={(e) => updateQuestionRow(i, { question: e.target.value })}
+                  placeholder={`Question ${i + 1}`}
+                  style={{ flex: 1, minHeight: 60 }}
+                />
+                <select
+                  value={q.length}
+                  onChange={(e) => updateQuestionRow(i, { length: e.target.value })}
+                  style={{ width: 140, flexShrink: 0 }}
+                >
+                  <option value="short">Short (~100w)</option>
+                  <option value="medium">Medium (~200w)</option>
+                  <option value="long">Long (~300w)</option>
+                </select>
+                {qaQuestions.length > 1 && (
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Remove question"
+                    onClick={() => removeQuestionRow(i)}
+                    style={{ flexShrink: 0 }}
+                  >
+                    <Icon name="trash" size={14} strokeWidth={1.5} />
+                  </button>
+                )}
+              </div>
+            ))}
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <button type="button" className="btn ghost sm" onClick={addQuestionRow}>
+                + Add question
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={runAnswerQuestions}
+                disabled={answeringQuestions}
+                style={{ marginLeft: 'auto' }}
+              >
+                {answeringQuestions ? 'Drafting…' : 'Draft answers'}
+              </button>
+            </div>
+
+            {qaError && (
+              <p className="auth-message error" style={{ margin: '14px 0' }}>{qaError}</p>
+            )}
+
+            {qaResult && qaResult.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 8 }}>
+                {qaResult.map((r, i) => (
+                  <div
+                    key={i}
+                    style={{ border: '1px solid var(--line-soft)', borderRadius: 8, padding: 14 }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        marginBottom: 8,
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{r.question}</div>
+                      <button
+                        type="button"
+                        className="btn sm"
+                        onClick={() => copyAnswer(i, r.answer)}
+                        style={{ flexShrink: 0 }}
+                      >
+                        {qaCopiedIndex === i ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                      {r.answer}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
