@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Modal from './Modal';
 import { makeId } from '@/lib/helpers';
+import { findDuplicateMatch, mergeBullets, mergeTechStack } from '@/lib/experienceDedup';
 
 const TYPES = [
   { value: 'internship', label: 'Internship' },
@@ -48,7 +49,7 @@ function toEditable(item) {
   };
 }
 
-export default function ImportResumeModal({ open, onClose, onImport }) {
+export default function ImportResumeModal({ open, onClose, onImport, onMerge, existingExperiences }) {
   const [file, setFile] = useState(null);
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState(null);
@@ -83,7 +84,16 @@ export default function ImportResumeModal({ open, onClose, onImport }) {
       const res = await fetch('/api/parse-resume', { method: 'POST', body });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not parse that resume.');
-      setItems((data.result || []).map(toEditable));
+      const editable = (data.result || []).map((item) => {
+        const match = findDuplicateMatch(item, existingExperiences || []);
+        return {
+          ...toEditable(item),
+          duplicateOf: match ? match.id : null,
+          duplicateLabel: match ? `${match.role} — ${match.org}` : null,
+          action: match ? 'skip' : 'import',
+        };
+      });
+      setItems(editable);
     } catch (e) {
       setParseError(e.message || 'Could not parse that resume.');
     } finally {
@@ -100,24 +110,45 @@ export default function ImportResumeModal({ open, onClose, onImport }) {
     setItems((list) => list.filter((it) => it._key !== key));
   };
 
+  const activeItems = (items || []).filter((it) => !(it.duplicateOf && it.action === 'skip'));
+
   const commit = async () => {
     if (!items || items.length === 0) return;
     setImporting(true);
     setImportError(null);
     try {
-      const payload = items.map((it) => ({
-        org: it.org.trim(),
-        role: it.role.trim(),
-        type: it.type,
-        start_date: it.start_date || null,
-        end_date: it.end_date || null,
-        location: it.location.trim() || null,
-        summary: it.summary.trim() || null,
-        tech_stack: fromCsv(it.tech_stack),
-        tags: [],
-        bullets: fromLines(it.bullets).map((text) => ({ text, tags: [] })),
-      }));
-      await onImport(payload);
+      const toInsert = [];
+      const toMerge = [];
+      for (const it of items) {
+        if (it.duplicateOf && it.action === 'skip') continue;
+        const bulletTexts = fromLines(it.bullets);
+        const techStack = fromCsv(it.tech_stack);
+        if (it.duplicateOf && it.action === 'update') {
+          toMerge.push({ id: it.duplicateOf, bulletTexts, techStack });
+        } else {
+          toInsert.push({
+            org: it.org.trim(),
+            role: it.role.trim(),
+            type: it.type,
+            start_date: it.start_date || null,
+            end_date: it.end_date || null,
+            location: it.location.trim() || null,
+            summary: it.summary.trim() || null,
+            tech_stack: techStack,
+            tags: [],
+            bullets: bulletTexts.map((text) => ({ text, tags: [] })),
+          });
+        }
+      }
+      if (toInsert.length) await onImport(toInsert);
+      for (const m of toMerge) {
+        const existing = (existingExperiences || []).find((e) => e.id === m.id);
+        if (!existing) continue;
+        await onMerge(m.id, {
+          bullets: mergeBullets(existing.bullets, m.bulletTexts),
+          tech_stack: mergeTechStack(existing.tech_stack, m.techStack),
+        });
+      }
       close();
     } catch (e) {
       setImportError(e.message || 'Failed to import experiences.');
@@ -135,8 +166,10 @@ export default function ImportResumeModal({ open, onClose, onImport }) {
         items ? (
           <>
             <button className="btn ghost" onClick={close}>Cancel</button>
-            <button className="btn" onClick={commit} disabled={importing || items.length === 0}>
-              {importing ? 'Importing…' : `Import ${items.length} experience${items.length === 1 ? '' : 's'}`}
+            <button className="btn" onClick={commit} disabled={importing || activeItems.length === 0}>
+              {importing
+                ? 'Importing…'
+                : `Import ${activeItems.length} experience${activeItems.length === 1 ? '' : 's'}`}
             </button>
           </>
         ) : (
@@ -180,6 +213,27 @@ export default function ImportResumeModal({ open, onClose, onImport }) {
                   marginBottom: 12,
                 }}
               >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                  {it.duplicateOf ? (
+                    <>
+                      <span className="tag">Already exists: {it.duplicateLabel}</span>
+                      <select
+                        value={it.action}
+                        onChange={(e) =>
+                          setItems((list) =>
+                            list.map((row) => (row._key === it._key ? { ...row, action: e.target.value } : row))
+                          )
+                        }
+                        style={{ width: 'auto' }}
+                      >
+                        <option value="skip">Skip (default)</option>
+                        <option value="update">Update existing — merge bullets</option>
+                      </select>
+                    </>
+                  ) : (
+                    <span className="tag">New</span>
+                  )}
+                </div>
                 <div className="form-grid">
                   <div>
                     <label>Organization</label>

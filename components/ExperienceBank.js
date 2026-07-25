@@ -137,6 +137,8 @@ export default function ExperienceBank() {
         open={importOpen}
         onClose={() => setImportOpen(false)}
         onImport={addExperiences}
+        onMerge={updateExperience}
+        existingExperiences={experiences}
       />
     </section>
   );
