@@ -8,7 +8,6 @@ import LeftRail from '@/components/LeftRail';
 import RightRail from '@/components/RightRail';
 import Dashboard from '@/components/Dashboard';
 import Applications from '@/components/Applications';
-import Resumes from '@/components/Resumes';
 import ExperienceBank from '@/components/ExperienceBank';
 import Calendar from '@/components/Calendar';
 import Retrospective from '@/components/Retrospective';
@@ -44,7 +43,6 @@ function App() {
           {view === 'applications' && (
             <Applications onNew={openNewApp} onEdit={openEditApp} />
           )}
-          {view === 'resumes' && <Resumes />}
           {view === 'experiences' && <ExperienceBank />}
           {view === 'calendar' && (
             <Calendar onNew={() => setEvtModal({ open: true })} />

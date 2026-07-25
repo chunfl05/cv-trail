@@ -5,7 +5,6 @@ import Icon from './Icon';
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
   { id: 'applications', label: 'Applications', icon: 'applications' },
-  { id: 'resumes', label: 'Resumes', icon: 'resumes' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   { id: 'retrospective', label: 'Insights', icon: 'insights' },
 ];

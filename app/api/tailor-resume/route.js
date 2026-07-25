@@ -231,28 +231,13 @@ async function handlePost(request) {
     skillsOrder,
   });
 
-  const label = `${application.role_title} @ ${application.company} (tailored)`;
-  const { data: resumeRow, error: resumeInsertError } = await supabase
-    .from('resumes')
-    .insert({
-      label,
-      is_base: false,
-      file_url: null,
-      content: { resume_json: resumeJson, latex },
-    })
-    .select('id')
-    .single();
-  if (resumeInsertError) {
-    return NextResponse.json({ error: resumeInsertError.message }, { status: 500 });
-  }
-
   const plainText = resumeJsonToPlainText(resumeJson);
 
   const { error: insertError } = await supabase.from('tailoring_runs').insert({
     application_id: applicationId,
     jd_keywords: [],
     match_score: matchScore,
-    suggestions: { resume_json: resumeJson, latex, resume_id: resumeRow.id },
+    suggestions: { resume_json: resumeJson, latex },
     generated_text: latex,
   });
   if (insertError) {
@@ -273,7 +258,6 @@ async function handlePost(request) {
       latex,
       resume: resumeJson,
       plain_text: plainText,
-      resume_id: resumeRow.id,
     },
   });
 }
